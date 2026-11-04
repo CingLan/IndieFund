@@ -1,0 +1,62 @@
+# 与 group-buy-market-app/src/main/resources/application-dev.yml 对齐
+# MySQL: 3306 / root / your_mysql_password / group_buy_market
+# Redis: 16379（无密码）
+# RabbitMQ: 应用配置 spring.rabbitmq.port=15672、your_rabbitmq_username/your_rabbitmq_password
+#           该 port 被 Spring AMQP 当作协议端口，因此将宿主机 15672 映射到容器 AMQP 5672
+services:
+  mysql:
+    image: mysql:8.0.32
+    container_name: group-buy-mysql
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: "your_mysql_password"
+      MYSQL_DATABASE: group_buy_market
+    ports:
+      - "3306:3306"
+    volumes:
+      - group-buy-mysql-data:/var/lib/mysql
+      - ./docs/dev-ops/mysql/sql/2-29-group_buy_market.sql:/docker-entrypoint-initdb.d/01-group_buy_market.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-pyour_mysql_password"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 20s
+
+  redis:
+    image: redis:6.2
+    container_name: group-buy-redis
+    restart: unless-stopped
+    ports:
+      - "16379:6379"
+    command: redis-server --bind 0.0.0.0 --protected-mode no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.12.9-management
+    container_name: group-buy-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: your_rabbitmq_username
+      RABBITMQ_DEFAULT_PASS: your_rabbitmq_password
+    ports:
+      - "5672:5672"
+      # 与 application-dev.yml 中 spring.rabbitmq.port=15672 对齐（AMQP）
+      - "15672:5672"
+      # 管理后台改到 15673，避免与上面的 15672 AMQP 映射冲突
+      - "15673:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 20s
+
+volumes:
+  group-buy-mysql-data:
